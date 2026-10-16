@@ -1,0 +1,31 @@
+# Databricks Asset Bundle: deploy with `databricks bundle deploy -t dev`.
+# Set your workspace host once with `databricks auth login --host <your-workspace-url>`.
+bundle:
+  name: hazer-tracker
+
+targets:
+  dev:
+    default: true
+    workspace:
+      # host: https://<your-workspace>.cloud.databricks.com   # or rely on your CLI profile
+
+resources:
+  jobs:
+    bronze_ingest_hourly:
+      name: hazer-bronze-ingest-hourly
+      # Minute 20 so both feeds are published: PM2.5 showed updatedTimestamp ~:15 past the hour.
+      schedule:
+        quartz_cron_expression: "0 20 * * * ?"
+        timezone_id: Asia/Singapore
+        pause_status: UNPAUSED
+      max_concurrent_runs: 1
+      # email_notifications:
+      #   on_failure: ["you@example.com"]
+      tasks:
+        - task_key: ingest
+          # No cluster block: runs on serverless compute (the only option on Free Edition).
+          notebook_task:
+            notebook_path: ./notebooks/01_bronze_ingest.py
+            base_parameters:
+              catalog: workspace
+              schema: hazer
