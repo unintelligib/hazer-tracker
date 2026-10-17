@@ -28,8 +28,14 @@ BACKFILL_DATE = dbutils.widgets.get("backfill_date").strip() or None
 BRONZE_TABLE = f"{CATALOG}.{SCHEMA}.bronze_nea_air_quality"
 
 # Make src/ importable. Works when the repo is synced to the workspace (bundle deploy or Git folder).
-notebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
-sys.path.append(os.path.abspath(f"/Workspace{os.path.dirname(notebook_path)}/../src"))
+try:
+    notebook_dir = os.path.dirname(
+        dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+    )
+    src_dir = os.path.abspath(f"/Workspace{notebook_dir}/../src")
+except Exception:
+    src_dir = os.path.abspath(os.path.join(os.getcwd(), "..", "src"))
+sys.path.append(src_dir)
 
 from hazer import nea_client  # noqa: E402
 
