@@ -19,8 +19,8 @@ BANDS = f"{catalog}.{schema}.ref_health_bands"
 
 # Lower bound inclusive, upper bound exclusive (NULL = no upper limit).
 # Exclusive upper bounds mean a decimal like 55.5 still lands in a band.
-# Values are NEA's published bands, written from memory: check them against
-# NEA's website before publishing the project.
+# Bands verified against NEA (nea.gov.sg air pollution FAQ for 24-hr PSI,
+# haze.gov.sg 1-hr PM2.5 readings page) in Oct 2026.
 spark.sql(f"""
 CREATE OR REPLACE TABLE {BANDS} AS
 SELECT * FROM VALUES
