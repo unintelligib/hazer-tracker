@@ -29,3 +29,16 @@ resources:
             base_parameters:
               catalog: workspace
               schema: hazer
+
+        - task_key: silver
+          depends_on:
+            - task_key: ingest
+          # Run even if ingest failed: it still saved its ok=false rows, and silver
+          # should process whatever did land.
+          run_if: ALL_DONE
+          notebook_task:
+            notebook_path: ./notebooks/02_silver_transform.py
+            base_parameters:
+              catalog: workspace
+              schema: hazer
+              full_refresh: "false"
