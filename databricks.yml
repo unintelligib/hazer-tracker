@@ -19,6 +19,7 @@ resources:
         timezone_id: Asia/Singapore
         pause_status: UNPAUSED
       max_concurrent_runs: 1
+      timeout_seconds: 600
       # email_notifications:
       #   on_failure: ["you@example.com"]
       tasks:
