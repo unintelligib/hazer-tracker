@@ -2,6 +2,9 @@
 # Set your workspace host once with `databricks auth login --host <your-workspace-url>`.
 bundle:
   name: hazer-tracker
+variables:
+  alert_email:
+    description: Address that receives job failure emails
 
 targets:
   dev:
@@ -20,8 +23,9 @@ resources:
         pause_status: UNPAUSED
       max_concurrent_runs: 1
       timeout_seconds: 600
-      # email_notifications:
-      #   on_failure: ["you@example.com"]
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
       tasks:
         - task_key: ingest
           # No cluster block: runs on serverless compute (the only option on Free Edition).
