@@ -40,6 +40,16 @@ display(spark.table(BANDS).orderBy("metric", "band_order"))
 
 # COMMAND ----------
 
+# High-haze flag fires at the PSI band where NEA labels air "Very unhealthy".
+# Looked up from the bands table so the threshold lives in one place.
+_row = spark.table(BANDS).where("metric = 'psi' AND band_name = 'Very unhealthy'").first()
+if _row is None:
+    raise ValueError("ref_health_bands has no psi 'Very unhealthy' band")
+HIGH_HAZE_BAND_ORDER = _row["band_order"]
+print("high-haze flag fires at psi band_order >=", HIGH_HAZE_BAND_ORDER)
+
+# COMMAND ----------
+
 # Sanity check: label the latest PSI reading for each region
 display(spark.sql(f"""
 SELECT s.reading_ts, s.region, s.psi_24hr, b.band_name
@@ -98,7 +108,8 @@ WITH agg AS (
   FROM {GOLD_REGION}
   GROUP BY reading_ts, reading_date_sgt, reading_hour_sgt
 )
-SELECT a.*, b.band_name AS psi_band, b.band_order AS psi_band_order
+SELECT a.*, b.band_name AS psi_band, b.band_order AS psi_band_order,
+       b.band_order >= {HIGH_HAZE_BAND_ORDER} AS is_high_haze
 FROM agg a
 LEFT JOIN {BANDS} b
   ON b.metric = 'psi'
@@ -148,7 +159,9 @@ SELECT
   max_by(reading_hour_sgt, psi_max)                     AS worst_hour_sgt,
   round(avg(pm25_avg), 1)                               AS pm25_avg,
   max(pm25_max)                                         AS pm25_max,
-  sum(CASE WHEN psi_band_order >= 3 THEN 1 ELSE 0 END)  AS hours_unhealthy_or_worse
+  sum(CASE WHEN psi_band_order >= 3 THEN 1 ELSE 0 END)  AS hours_unhealthy_or_worse,
+  sum(CASE WHEN psi_band_order >= {HIGH_HAZE_BAND_ORDER} THEN 1 ELSE 0 END)
+                                                        AS hours_very_unhealthy
 FROM {GOLD_ISLAND}
 GROUP BY reading_date_sgt
 """)
