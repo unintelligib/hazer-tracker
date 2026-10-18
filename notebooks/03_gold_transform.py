@@ -159,3 +159,34 @@ dr = spark.table(GOLD_DAILY_REGION)
 di = spark.table(GOLD_DAILY_ISLAND)
 print("daily region rows:", dr.count(), "| daily island rows (days):", di.count())
 display(di.orderBy("reading_date_sgt", ascending=False))
+
+# COMMAND ----------
+# ref_regions: region label coordinates from the latest good PSI payload.
+# Static data, but rebuilt each run. Guarded so an empty result never wipes the table.
+BRONZE = f"{catalog}.{schema}.bronze_nea_air_quality"
+REF_REGIONS = f"{catalog}.{schema}.ref_regions"
+
+regions_sql = f"""
+WITH latest AS (
+  SELECT payload
+  FROM {BRONZE}
+  WHERE endpoint = 'psi' AND ok
+  ORDER BY fetched_at DESC
+  LIMIT 1
+)
+SELECT m.name AS region,
+       m.labelLocation.latitude  AS latitude,
+       m.labelLocation.longitude AS longitude
+FROM latest
+LATERAL VIEW explode(from_json(
+  get_json_object(payload, '$.data.regionMetadata'),
+  'array<struct<name:string,labelLocation:struct<latitude:double,longitude:double>>>'
+)) t AS m
+"""
+
+n_regions = spark.sql(regions_sql).count()
+if n_regions == 0:
+    raise ValueError("ref_regions: no regionMetadata in latest PSI payload; existing table left unchanged")
+
+spark.sql(f"CREATE OR REPLACE TABLE {REF_REGIONS} AS {regions_sql}")
+print(f"ref_regions rebuilt with {n_regions} regions")
