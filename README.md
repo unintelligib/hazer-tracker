@@ -68,7 +68,7 @@ All tables live in `workspace.hazer`.
 
 ![Singapore Air Quality dashboard, published view](docs/dashboard-overview.png)
 
-"Singapore Air Quality" is an AI/BI dashboard with one page, "Overview": counters (PSI, health band, latest reading, change versus the same hour yesterday, high-haze alert), a map of the five regions coloured by PSI band, a PM2.5 trend for the last 48 hours, and a daily peak PSI chart for the last 7 complete days. Its datasets use SGT date and hour columns, so the charts do not drift with time zones.
+"Singapore Air Quality" is an AI/BI dashboard with one page, "Overview": counters (PSI, health band, latest reading, change versus the same hour yesterday, very unhealthy alert), a map of the five regions coloured by PSI band, a PM2.5 trend for the last 48 hours, and a daily peak PSI chart for the last 7 complete days. Its datasets use SGT date and hour columns, so the charts do not drift with time zones.
 
 The dashboard is exported into the bundle (`src/singapore_air_quality.lvdash.json` and `resources/singapore_air_quality.dashboard.yml`), so `bundle deploy` creates a copy named `[dev] Singapore Air Quality`. Two things to know:
 
