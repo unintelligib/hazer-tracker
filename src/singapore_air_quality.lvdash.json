@@ -397,15 +397,12 @@
                   "scale": {
                     "mappings": [
                       {
-                        "color": {
-                          "position": 2,
-                          "themeColorType": "visualizationColors"
-                        },
+                        "color": "#FFE300",
                         "value": "Unhealthy"
                       },
                       {
                         "color": {
-                          "position": 1,
+                          "position": 3,
                           "themeColorType": "visualizationColors"
                         },
                         "value": "Moderate"
