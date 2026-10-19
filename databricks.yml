@@ -56,3 +56,6 @@ resources:
             base_parameters:
               catalog: workspace
               schema: hazer
+
+include:
+  - resources/*.yml

@@ -1,0 +1,626 @@
+{
+  "datasets": [
+    {
+      "displayName": "current_status",
+      "name": "e57623e5",
+      "queryLines": [
+        "   SELECT\n",
+        "     psi_max,\n",
+        "     psi_band,\n",
+        "     psi_band_order,\n",
+        "     is_high_haze,\n",
+        "        CASE WHEN is_high_haze THEN 'HIGH HAZE'\n",
+        "        WHEN NOT is_high_haze THEN 'No high-haze alert'\n",
+        "        ELSE 'Unknown' END AS haze_flag,\n",
+        "     worst_region,\n",
+        "     pm25_avg,\n",
+        "     concat(date_format(reading_date_sgt, 'd MMM'), ', ',\n",
+        "            lpad(reading_hour_sgt, 2, '0'), ':00 SGT')       AS as_of_sgt,\n",
+        "     timestampdiff(MINUTE, reading_ts, current_timestamp())  AS minutes_since_reading\n",
+        "   FROM workspace.hazer.gold_hourly_island\n",
+        "   ORDER BY reading_ts DESC\n",
+        "   LIMIT 1;"
+      ]
+    },
+    {
+      "displayName": "region_map",
+      "name": "7992c3d9",
+      "queryLines": [
+        "SELECT\n",
+        "  g.region,\n",
+        "  r.latitude,\n",
+        "  r.longitude,\n",
+        "  g.psi_24hr,\n",
+        "  g.psi_band,\n",
+        "  g.psi_band_order,\n",
+        "  g.pm25_1hr\n",
+        "FROM workspace.hazer.gold_hourly_region g\n",
+        "JOIN workspace.hazer.ref_regions r ON g.region = r.region\n",
+        "WHERE g.reading_ts = (SELECT max(reading_ts) FROM workspace.hazer.gold_hourly_region)\n",
+        "ORDER BY g.region;"
+      ]
+    },
+    {
+      "displayName": "pm25_trend",
+      "name": "7b1a2a02",
+      "queryLines": [
+        "WITH win AS (\n",
+        "  SELECT max(reading_ts) - INTERVAL 47 HOURS AS start_ts\n",
+        "  FROM workspace.hazer.gold_hourly_region\n",
+        ")\n",
+        "SELECT\n",
+        "  CAST(concat(reading_date_sgt, ' ', lpad(reading_hour_sgt, 2, '0'), ':00:00')\n",
+        "       AS TIMESTAMP_NTZ)       AS reading_time_sgt,\n",
+        "  'Island average'             AS series,\n",
+        "  pm25_avg                     AS pm25_1hr\n",
+        "FROM workspace.hazer.gold_hourly_island, win\n",
+        "WHERE reading_ts >= win.start_ts\n",
+        "\n",
+        "UNION ALL\n",
+        "\n",
+        "SELECT\n",
+        "  CAST(concat(reading_date_sgt, ' ', lpad(reading_hour_sgt, 2, '0'), ':00:00')\n",
+        "       AS TIMESTAMP_NTZ),\n",
+        "  region,\n",
+        "  pm25_1hr\n",
+        "FROM workspace.hazer.gold_hourly_region, win\n",
+        "WHERE reading_ts >= win.start_ts\n",
+        "\n",
+        "ORDER BY reading_time_sgt, series;"
+      ]
+    },
+    {
+      "displayName": "daily_comparison",
+      "name": "0fa6348e",
+      "queryLines": [
+        "SELECT\n",
+        "  reading_date_sgt,\n",
+        "  date_format(reading_date_sgt, 'EEE d MMM') AS day_label,\n",
+        "  psi_max,\n",
+        "  psi_avg,\n",
+        "  pm25_avg,\n",
+        "  hours_very_unhealthy\n",
+        "FROM workspace.hazer.gold_daily_island\n",
+        "WHERE is_complete_day\n",
+        "ORDER BY reading_date_sgt DESC\n",
+        "LIMIT 7;"
+      ]
+    },
+    {
+      "displayName": "vs_yesterday",
+      "name": "fc859c24",
+      "queryLines": [
+        "SELECT\n",
+        "  t.psi_max          AS psi_now,\n",
+        "  y.psi_max          AS psi_yesterday,\n",
+        "  t.psi_max - y.psi_max AS psi_change,\n",
+        "  t.pm25_avg         AS pm25_now,\n",
+        "  y.pm25_avg         AS pm25_yesterday,\n",
+        "  t.pm25_avg - y.pm25_avg AS pm25_change\n",
+        "FROM workspace.hazer.gold_hourly_island t\n",
+        "LEFT JOIN workspace.hazer.gold_hourly_island y\n",
+        "  ON y.reading_ts = t.reading_ts - INTERVAL 24 HOURS\n",
+        "WHERE t.reading_ts = (SELECT max(reading_ts) FROM workspace.hazer.gold_hourly_island);"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "displayName": "Overview",
+      "layout": [
+        {
+          "position": {
+            "height": 3,
+            "width": 4,
+            "x": 0,
+            "y": 0
+          },
+          "widget": {
+            "name": "psi-24hr-island-wide",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "e57623e5",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "SUM(`psi_max`)",
+                      "name": "sum(psi_max)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(psi_max)"
+                }
+              },
+              "frame": {
+                "showDescription": false,
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "PSI (24hr) island-wide"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 3,
+            "width": 4,
+            "x": 0,
+            "y": 3
+          },
+          "widget": {
+            "name": "health-band-nea",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "e57623e5",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`psi_band`",
+                      "name": "psi_band"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "psi_band"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Health band (NEA)"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 3,
+            "width": 4,
+            "x": 4,
+            "y": 6
+          },
+          "widget": {
+            "name": "latest-reading",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "e57623e5",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`as_of_sgt`",
+                      "name": "as_of_sgt"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "as_of_sgt"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Latest reading"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 3,
+            "width": 4,
+            "x": 0,
+            "y": 6
+          },
+          "widget": {
+            "name": "psi-vs-same-hour-yesterday",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "fc859c24",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "MAX(`psi_change`)",
+                      "name": "max(psi_change)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "max(psi_change)"
+                }
+              },
+              "frame": {
+                "description": {
+                  "fields": [],
+                  "value": "Negative = better than yesterday"
+                },
+                "showDescription": true,
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "PSI vs same hour yesterday"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 3,
+            "width": 4,
+            "x": 8,
+            "y": 6
+          },
+          "widget": {
+            "name": "high-haze-alert-psi-201",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "e57623e5",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`haze_flag`",
+                      "name": "haze_flag"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "haze_flag"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "High-haze alert (PSI ≥ 201)"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 6,
+            "width": 8,
+            "x": 4,
+            "y": 0
+          },
+          "widget": {
+            "name": "psi-by-region-latest-hour",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "7992c3d9",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`psi_band`",
+                      "name": "psi_band"
+                    },
+                    {
+                      "expression": "`latitude`",
+                      "name": "latitude"
+                    },
+                    {
+                      "expression": "`longitude`",
+                      "name": "longitude"
+                    },
+                    {
+                      "expression": "`psi_24hr`",
+                      "name": "psi_24hr"
+                    },
+                    {
+                      "expression": "`pm25_1hr`",
+                      "name": "pm25_1hr"
+                    },
+                    {
+                      "expression": "`region`",
+                      "name": "region"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "color": {
+                  "fieldName": "psi_band",
+                  "legend": {
+                    "position": "top",
+                    "title": "PSI"
+                  },
+                  "scale": {
+                    "mappings": [
+                      {
+                        "color": {
+                          "position": 2,
+                          "themeColorType": "visualizationColors"
+                        },
+                        "value": "Unhealthy"
+                      },
+                      {
+                        "color": {
+                          "position": 1,
+                          "themeColorType": "visualizationColors"
+                        },
+                        "value": "Moderate"
+                      }
+                    ],
+                    "type": "categorical"
+                  }
+                },
+                "coordinates": {
+                  "latitude": {
+                    "fieldName": "latitude"
+                  },
+                  "longitude": {
+                    "fieldName": "longitude"
+                  }
+                },
+                "extra": [
+                  {
+                    "fieldName": "psi_24hr"
+                  },
+                  {
+                    "fieldName": "pm25_1hr"
+                  },
+                  {
+                    "fieldName": "region"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "PSI by region (latest hour)"
+                }
+              },
+              "mark": {
+                "opacity": 0.68,
+                "size": 2.7
+              },
+              "version": 2,
+              "widgetType": "symbol-map"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 6,
+            "width": 6,
+            "x": 6,
+            "y": 9
+          },
+          "widget": {
+            "name": "pm25-1hr-last-48-hours",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "7b1a2a02",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`series`",
+                      "name": "series"
+                    },
+                    {
+                      "expression": "DATE_TRUNC(\"HOUR\", `reading_time_sgt`)",
+                      "name": "hourly(reading_time_sgt)"
+                    },
+                    {
+                      "expression": "AVG(`pm25_1hr`)",
+                      "name": "avg(pm25_1hr)"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`series` IN ('Island average')"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "color": {
+                  "fieldName": "series",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "x": {
+                  "axis": {
+                    "title": "Time"
+                  },
+                  "fieldName": "hourly(reading_time_sgt)",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "axis": {
+                    "title": "PM2.5 (µg/m³, 1-hr)"
+                  },
+                  "fieldName": "avg(pm25_1hr)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "PM2.5 (1-hr), last 48 hours"
+                }
+              },
+              "mark": {
+                "lineShape": "linear"
+              },
+              "version": 3,
+              "widgetType": "line"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 6,
+            "width": 6,
+            "x": 0,
+            "y": 9
+          },
+          "widget": {
+            "name": "daily-peak-psi",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "0fa6348e",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "DATE_TRUNC(\"DAY\", `reading_date_sgt`)",
+                      "name": "daily(reading_date_sgt)"
+                    },
+                    {
+                      "expression": "`psi_max`",
+                      "name": "psi_max"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "x": {
+                  "displayName": "Date",
+                  "fieldName": "daily(reading_date_sgt)",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "displayName": "PSI max",
+                  "fieldName": "psi_max",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Daily peak PSI"
+                }
+              },
+              "version": 3,
+              "widgetType": "bar"
+            }
+          }
+        }
+      ],
+      "layoutVersion": "GRID_V1",
+      "name": "ee44c9c2",
+      "pageType": "PAGE_TYPE_CANVAS"
+    }
+  ],
+  "uiSettings": {
+    "applyModeEnabled": false,
+    "theme": {
+      "canvasBackgroundColor": {
+        "dark": "#1F272D",
+        "light": "#FAFAFB"
+      },
+      "fontColor": {
+        "dark": "#E8ECF0",
+        "light": "#11171C"
+      },
+      "selectionColor": {
+        "dark": "#8ACAFF",
+        "light": "#2272B4"
+      },
+      "widgetBackgroundColor": {
+        "dark": "#11171C",
+        "light": "#FFFFFF"
+      },
+      "widgetCornerRadius": 8,
+      "widgetHeaderAlignment": "LEFT",
+      "widgetMargin": 8,
+      "widgetPadding": 8
+    }
+  }
+}
