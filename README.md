@@ -80,7 +80,7 @@ The dashboard is exported into the bundle (`src/singapore_air_quality.lvdash.jso
 ## Setup
 
 1. Install the [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/install) and run `databricks auth login --host <workspace-url>`.
-2. Set the alert address for failure emails in your shell, never in a file: the bundle variable is `alert_email`, supplied through the `BUNDLE_VAR_alert_email` environment variable. Deploying without it fails with a "no value" error.
+2. Set the alert address for failure emails in your shell: the bundle variable is `alert_email`, supplied through the `BUNDLE_VAR_alert_email` environment variable. Deploying without it fails with a "no value" error.
 3. Replace `warehouse_id` in `resources/singapore_air_quality.dashboard.yml` with your own.
 4. `databricks bundle validate -t dev`, then `databricks bundle deploy -t dev`. This deploys the three notebooks, the hourly job and the dashboard.
 5. Run the job once (`databricks bundle run bronze_ingest_hourly -t dev`, or from the Jobs UI) and check `SELECT * FROM workspace.hazer.bronze_nea_air_quality`.
