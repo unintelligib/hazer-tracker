@@ -66,6 +66,8 @@ All tables live in `workspace.hazer`.
 
 ## Dashboard
 
+Design decisions and known limitations are in [docs/design-choices.md](docs/design-choices.md).
+
 ![Singapore Air Quality dashboard, published view](docs/dashboard-overview.png)
 
 "Singapore Air Quality" is an AI/BI dashboard with one page, "Overview": counters (PSI, health band, latest reading, change versus the same hour yesterday, very unhealthy alert), a map of the five regions coloured by PSI band, a PM2.5 trend for the last 48 hours, and a daily peak PSI chart for the last 7 complete days. Its datasets use SGT date and hour columns, so the charts do not drift with time zones.
