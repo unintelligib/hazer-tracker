@@ -97,5 +97,5 @@ pytest
 
 ## Open questions
 
-* Pagination: the docs describe a pagination token for date-filtered requests, but its exact response field name has not been confirmed against a live multi-page response. The client accepts `paginationToken` or `pagination_token`. Confirm on the first backfill that needs a second page.
+* Pagination: per the data.gov.sg OpenAPI spec, date-filtered responses carry a `data.paginationToken` when another page exists, and the client sends it back as the `paginationToken` query parameter. Every whole-day request so far has fit on one page.
 * Free Edition limits on public dashboard sharing: not yet confirmed in the workspace.

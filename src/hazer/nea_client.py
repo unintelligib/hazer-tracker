@@ -30,9 +30,10 @@ ENDPOINTS = {
 
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
-# Pagination is documented for date-filtered requests only. The exact field name
-# of the token in the response has not been confirmed against a live paginated
-# response yet, so both spellings are accepted (see README "Open questions").
+# Pagination applies to date-filtered requests only. Per the data.gov.sg OpenAPI
+# spec, the response carries the token at data.paginationToken and the next page
+# is requested with the paginationToken query parameter. A whole-day request has
+# always fit on one page so far. snake_case is kept only as a harmless fallback.
 _TOKEN_KEYS = ("paginationToken", "pagination_token")
 
 
