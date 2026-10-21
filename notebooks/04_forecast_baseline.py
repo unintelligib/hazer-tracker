@@ -140,6 +140,17 @@ for h in HORIZONS:
     model = fit_ridge(train[FEATURES].to_numpy(), train["target"].to_numpy(), RIDGE_ALPHA)
     pred = predict_ridge(model, test[FEATURES].to_numpy())
     y = test["target"].to_numpy()
+    cal_start = train.index[int(len(train) * 0.8)]
+    fit = train[train.index + h * HOUR < cal_start]
+    cal = train[train.index >= cal_start]
+    cal_model = fit_ridge(fit[FEATURES].to_numpy(), fit["target"].to_numpy(), RIDGE_ALPHA)
+    cal_level = np.maximum(cal["now"].to_numpy(), 5.0)
+    rel_resid = (cal["target"].to_numpy() - predict_ridge(cal_model, cal[FEATURES].to_numpy())) / cal_level
+    tail = 0.10 if h <= 3 else 0.05
+    q_lo, q_hi = np.quantile(rel_resid, [tail, 1 - tail])
+    test_level = np.maximum(test["now"].to_numpy(), 5.0)
+    lower, upper = pred + q_lo * test_level, pred + q_hi * test_level
+    coverage = float(np.mean((y >= lower) & (y <= upper)))
 
     rows.append({
         "horizon_h": h,
@@ -150,6 +161,8 @@ for h in HORIZONS:
         "mae_ridge": mae(y, pred),
         "rmse_persistence": rmse(y, test["now"].to_numpy()),
         "rmse_ridge": rmse(y, pred),
+        "coverage_80": coverage,
+        "range_width_80": float(np.mean(upper - lower)),
     })
 
 results = pd.DataFrame(rows)
