@@ -15,14 +15,17 @@
 
 import numpy as np
 import pandas as pd
+from sklearn.ensemble import HistGradientBoostingRegressor
 
 dbutils.widgets.text("horizons", "1,3,6,24", "Forecast horizons in hours (max 24)")
 dbutils.widgets.text("test_fraction", "0.25", "Share of history held out for testing")
 dbutils.widgets.text("ridge_alpha", "1.0", "Ridge penalty")
+dbutils.widgets.text("high_pm25", "56", "High-hour threshold, ug/m3 (start of NEA 1-hr PM2.5 Elevated band)")
 
 HORIZONS = [int(h) for h in dbutils.widgets.get("horizons").split(",")]
 TEST_FRACTION = float(dbutils.widgets.get("test_fraction"))
 RIDGE_ALPHA = float(dbutils.widgets.get("ridge_alpha"))
+HIGH_PM25 = float(dbutils.widgets.get("high_pm25"))
 assert all(1 <= h <= 24 for h in HORIZONS), "horizons must be between 1 and 24"
 assert 0.05 <= TEST_FRACTION <= 0.6, "test_fraction should be between 0.05 and 0.6"
 
@@ -139,6 +142,14 @@ for h in HORIZONS:
 
     model = fit_ridge(train[FEATURES].to_numpy(), train["target"].to_numpy(), RIDGE_ALPHA)
     pred = predict_ridge(model, test[FEATURES].to_numpy())
+    # Gradient boosting predicts the change from now, not the level. Tree models cannot
+    # predict outside the range they were trained on, and haze levels in the test period
+    # can exceed anything in training; changes are much more alike across episodes.
+    gbm = HistGradientBoostingRegressor(
+        learning_rate=0.05, max_iter=300, max_leaf_nodes=15, min_samples_leaf=20, random_state=0
+    )
+    gbm.fit(train[FEATURES].to_numpy(), (train["target"] - train["now"]).to_numpy())
+    pred_gbm = test["now"].to_numpy() + gbm.predict(test[FEATURES].to_numpy())
     y = test["target"].to_numpy()
     cal_start = train.index[int(len(train) * 0.8)]
     fit = train[train.index + h * HOUR < cal_start]
@@ -151,6 +162,10 @@ for h in HORIZONS:
     test_level = np.maximum(test["now"].to_numpy(), 5.0)
     lower, upper = pred + q_lo * test_level, pred + q_hi * test_level
     coverage = float(np.mean((y >= lower) & (y <= upper)))
+    # Same errors on high hours only: test hours whose actual reading is at or above HIGH_PM25.
+    high = y >= HIGH_PM25
+    n_high = int(high.sum())
+    now_test = test["now"].to_numpy()
 
     rows.append({
         "horizon_h": h,
@@ -159,10 +174,16 @@ for h in HORIZONS:
         "mae_persistence": mae(y, test["now"].to_numpy()),
         "mae_yesterday": mae(y, test["yesterday"].to_numpy()),
         "mae_ridge": mae(y, pred),
+        "mae_gbm": mae(y, pred_gbm),
         "rmse_persistence": rmse(y, test["now"].to_numpy()),
         "rmse_ridge": rmse(y, pred),
         "coverage": coverage,
         "range_width": float(np.mean(upper - lower)),
+        "high_rows": n_high,
+        "mae_persistence_high": mae(y[high], now_test[high]) if n_high else np.nan,
+        "mae_ridge_high": mae(y[high], pred[high]) if n_high else np.nan,
+        "mae_gbm_high": mae(y[high], pred_gbm[high]) if n_high else np.nan,
+        "coverage_high": float(np.mean((y[high] >= lower[high]) & (y[high] <= upper[high]))) if n_high else np.nan,
     })
 
 results = pd.DataFrame(rows)
@@ -171,10 +192,14 @@ if results.empty:
 else:
     # Positive means ridge has a lower MAE than persistence.
     results["ridge_vs_persistence"] = 1 - results["mae_ridge"] / results["mae_persistence"]
+    results["ridge_vs_persistence_high"] = 1 - results["mae_ridge_high"] / results["mae_persistence_high"]
+    results["gbm_vs_persistence"] = 1 - results["mae_gbm"] / results["mae_persistence"]
+    results["gbm_vs_persistence_high"] = 1 - results["mae_gbm_high"] / results["mae_persistence_high"]
     display(results.round(3))
     if results["test_rows"].min() < 48:
         print("Warning: fewer than 48 test rows at some horizon. Treat these results as indicative only.")
     print("Note: at +24h the 'yesterday' baseline is identical to persistence.")
+    print(f"High hours: actual pm25_avg >= {HIGH_PM25:g}. Fewer than ~30 high_rows at a horizon means those columns are noisy.")
 
 # COMMAND ----------
 
@@ -185,4 +210,6 @@ else:
 # MAGIC - Persistence is hard to beat at +1h. A model usually only wins clearly at longer horizons.
 # MAGIC - With only a few days of history the test period is small and the numbers are noisy. More backfilled days make this table more trustworthy.
 # MAGIC - **This is one split, so it can mislead.** If the held-out days contain a haze episode that the training days never saw, ridge can look much worse than persistence (on made-up data with a single episode, ridge's error was sometimes 2 to 4 times persistence's). A negative number at one horizon does not prove the model is bad. Before trusting a verdict, change `test_fraction` (for example 0.2 and 0.35) and see whether the winner changes.
-# MAGIC - Next steps if the model wins: add an 80% prediction range and measure its coverage, then test weather and smoke features against these numbers.
+# MAGIC - `_high` columns repeat the comparison on test hours whose actual reading is at or above `high_pm25` (default 56, the start of NEA's 1-hr PM2.5 Elevated band). In Oct 2026 all of these hours came from one haze episode, so they describe that episode, not haze in general.
+# MAGIC - **Gradient boosting was tried and rejected.** It predicts the change from now so it can forecast above its training range, but it still lost to persistence at every horizon (by 8-32% over all hours and 23-68% on high hours, test_fraction 0.25). With only one earlier haze episode (Sep 2019) to learn from, it learned that episode's quick clear-ups and kept forecasting a drop that did not come in Oct 2026. Ridge is kept.
+# MAGIC - Next steps: more haze history, and weather and smoke features, tested against these numbers.

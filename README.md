@@ -74,14 +74,25 @@ Design decisions and known limitations are in [docs/design-choices.md](docs/desi
 
 The dashboard is exported into the bundle (`src/singapore_air_quality.lvdash.json` and `resources/singapore_air_quality.dashboard.yml`), so `bundle deploy` creates a copy named `[dev] Singapore Air Quality`. Two things to know:
 
-* The YAML hardcodes `warehouse_id`. Replace it with the ID of your own serverless SQL warehouse before deploying.
+* The SQL warehouse is looked up by name ("Serverless Starter Warehouse") through the `warehouse_id` variable in `databricks.yml`. If yours has a different name, change it there.
 * The hourly refresh schedule was set by hand on the published original, not in the bundle. The deployed copy has no refresh schedule of its own.
+
+## Forecast (in progress)
+
+The plan is to show a short-range forecast of island-average PM2.5 (+1, +3, +6 and +24 hours) on the dashboard. It is evaluated in `notebooks/04_forecast_baseline.py`, which only reads data. This is not an official forecast.
+
+* **Model.** Ridge regression on the latest reading, recent lags (1, 2, 3, 6 and 24 hours) and hour of day, one model per horizon. It is compared with persistence ("the next hours look like now") on held-out recent data, at three split sizes.
+* **Overall.** Ridge has a lower average error than persistence at every horizon on every split: about 4% better at +1h and +3h, 6% at +6h and 10% at +24h.
+* **During haze it is least reliable.** On hours where PM2.5 was 56 µg/m³ or more (NEA's Elevated band), ridge roughly matched persistence at +1h and was 3-6% worse from +3h on. Average errors on those hours were large: about 6 µg/m³ at +1h, rising to about 32 at +24h. Every such hour in the test data comes from the Sep-Oct 2026 haze, so this describes one episode, which went higher (peak 288) than anything in the training history.
+* **Likely range.** Each forecast comes with a likely range. Over all hours it contained the actual value 70-92% of the time. On haze hours at +24h it missed about 1 in 3.
+* **Gradient boosting was tried and rejected.** It lost to persistence at every horizon, by 8-32% overall and 23-68% on haze hours. With only one earlier haze episode (Sep 2019) to learn from, it learned that episode's quick clear-ups and kept forecasting a drop that did not come.
+* **What would help most** is more haze history to train on, and weather and smoke inputs, rather than a more complex model.
 
 ## Setup
 
 1. Install the [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/install) and run `databricks auth login --host <workspace-url>`.
 2. Set the alert address for failure emails in your shell: the bundle variable is `alert_email`, supplied through the `BUNDLE_VAR_alert_email` environment variable. Deploying without it fails with a "no value" error.
-3. Replace `warehouse_id` in `resources/singapore_air_quality.dashboard.yml` with your own.
+3. If your SQL warehouse is not named "Serverless Starter Warehouse", change the `warehouse_id` lookup in `databricks.yml`.
 4. `databricks bundle validate -t dev`, then `databricks bundle deploy -t dev`. This deploys the three notebooks, the hourly job and the dashboard.
 5. Run the job once (`databricks bundle run bronze_ingest_hourly -t dev`, or from the Jobs UI) and check `SELECT * FROM workspace.hazer.bronze_nea_air_quality`.
 6. Optional backfill for a past date: `databricks bundle run bronze_ingest_hourly -t dev --notebook-params backfill_date=YYYY-MM-DD`.
