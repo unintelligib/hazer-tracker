@@ -61,5 +61,15 @@ resources:
               catalog: workspace
               schema: hazer
 
+        - task_key: forecast
+          depends_on:
+            - task_key: gold
+          notebook_task:
+            notebook_path: ./notebooks/06_forecast.py
+            base_parameters:
+              catalog: workspace
+              schema: hazer
+              ridge_alpha: "10"
+
 include:
   - resources/*.yml
