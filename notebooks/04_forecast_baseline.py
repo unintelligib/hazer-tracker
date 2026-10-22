@@ -161,8 +161,8 @@ for h in HORIZONS:
         "mae_ridge": mae(y, pred),
         "rmse_persistence": rmse(y, test["now"].to_numpy()),
         "rmse_ridge": rmse(y, pred),
-        "coverage_80": coverage,
-        "range_width_80": float(np.mean(upper - lower)),
+        "coverage": coverage,
+        "range_width": float(np.mean(upper - lower)),
     })
 
 results = pd.DataFrame(rows)

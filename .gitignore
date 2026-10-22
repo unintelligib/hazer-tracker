@@ -15,3 +15,7 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# macOS zip and resource-fork leftovers
+__MACOSX/
+._*

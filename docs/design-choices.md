@@ -42,7 +42,7 @@ The alert address for failure emails is a bundle variable (`alert_email`) suppli
 
 ## Known limitations and open questions
 
-* One scheduled run (12:20 SGT on 18 Oct) hung in the bronze Delta write and the cause was not found. If it recurs, the plan is to check `DESCRIBE HISTORY` on the bronze table, and to raise the job timeout from 600 to 900 seconds if a slow but healthy run gets cut off.
+
 * Pagination follows the data.gov.sg OpenAPI spec: the token is read from `data.paginationToken` and sent back as the `paginationToken` query parameter. No whole-day request has needed a second page so far. The client also accepts `pagination_token` as a fallback, but only the documented spelling is tested.
 * Public dashboard sharing on Free Edition has not been checked.
 * The ingest client opens a new HTTP session for every request. Sharing one session would be a small improvement.
