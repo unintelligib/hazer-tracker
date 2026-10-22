@@ -5,6 +5,10 @@ bundle:
 variables:
   alert_email:
     description: Address that receives job failure emails
+  warehouse_id:
+    description: SQL warehouse used by the dashboard
+    lookup:
+      warehouse: "Serverless Starter Warehouse"
 
 targets:
   dev:
