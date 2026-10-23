@@ -102,6 +102,64 @@
         "  ON y.reading_ts = t.reading_ts - INTERVAL 24 HOURS\n",
         "WHERE t.reading_ts = (SELECT max(reading_ts) FROM workspace.hazer.gold_hourly_island);"
       ]
+    },
+    {
+      "displayName": "forecast_chart",
+      "name": "6b4e0612",
+      "queryLines": [
+        "   WITH latest AS (\n",
+        "     SELECT * FROM workspace.hazer.gold_forecast\n",
+        "     WHERE origin_ts = (SELECT max(origin_ts) FROM workspace.hazer.gold_forecast)\n",
+        "   ),\n",
+        "   win AS (SELECT max(origin_ts) - INTERVAL 23 HOURS AS start_ts FROM latest)\n",
+        "   SELECT\n",
+        "     CAST(concat(reading_date_sgt, ' ', lpad(reading_hour_sgt, 2, '0'), ':00:00') AS TIMESTAMP_NTZ) AS time_sgt,\n",
+        "     'Actual' AS series,\n",
+        "     pm25_avg AS pm25\n",
+        "   FROM workspace.hazer.gold_hourly_island, win\n",
+        "   WHERE reading_ts >= win.start_ts AND pm25_avg IS NOT NULL\n",
+        "\n",
+        "   UNION ALL\n",
+        "\n",
+        "   SELECT\n",
+        "     CAST(concat(target_date_sgt, ' ', lpad(target_hour_sgt, 2, '0'), ':00:00') AS TIMESTAMP_NTZ),\n",
+        "     s.series,\n",
+        "     s.pm25\n",
+        "   FROM latest\n",
+        "   LATERAL VIEW stack(3, 'Forecast', pm25_forecast,\n",
+        "                         'Likely range, low', pm25_lower,\n",
+        "                         'Likely range, high', pm25_upper) s AS series, pm25\n",
+        "\n",
+        "   UNION ALL\n",
+        "\n",
+        "   -- Start each forecast line at the latest reading so it joins the actual line\n",
+        "   SELECT DISTINCT\n",
+        "     CAST(concat(origin_date_sgt, ' ', lpad(origin_hour_sgt, 2, '0'), ':00:00') AS TIMESTAMP_NTZ),\n",
+        "     s.series,\n",
+        "     pm25_now\n",
+        "   FROM latest\n",
+        "   LATERAL VIEW explode(array('Forecast', 'Likely range, low', 'Likely range, high')) s AS series\n",
+        "\n",
+        "   ORDER BY time_sgt, series;"
+      ]
+    },
+    {
+      "displayName": "forecast_table",
+      "name": "1074f68c",
+      "queryLines": [
+        "   SELECT\n",
+        "     horizon_h,\n",
+        "     concat('+', horizon_h, ' h')                                  AS horizon,\n",
+        "     concat(date_format(target_date_sgt, 'EEE d MMM'), ', ',\n",
+        "            lpad(target_hour_sgt, 2, '0'), ':00 SGT')               AS for_time_sgt,\n",
+        "     CAST(round(pm25_forecast) AS INT)                              AS forecast,\n",
+        "     concat(CAST(round(pm25_lower) AS INT), '–',\n",
+        "            CAST(round(pm25_upper) AS INT))                         AS likely_range,\n",
+        "     CAST(round(pm25_now) AS INT)                                   AS now\n",
+        "   FROM workspace.hazer.gold_forecast\n",
+        "   WHERE origin_ts = (SELECT max(origin_ts) FROM workspace.hazer.gold_forecast)\n",
+        "   ORDER BY horizon_h;"
+      ]
     }
   ],
   "pages": [
@@ -587,6 +645,180 @@
               "version": 3,
               "widgetType": "bar"
             }
+          }
+        },
+        {
+          "position": {
+            "height": 6,
+            "width": 6,
+            "x": 0,
+            "y": 15
+          },
+          "widget": {
+            "name": "pm25-forecast-next-24-hours-ugm3-island-average",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "6b4e0612",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`series`",
+                      "name": "series"
+                    },
+                    {
+                      "expression": "DATE_TRUNC(\"HOUR\", `time_sgt`)",
+                      "name": "hourly(time_sgt)"
+                    },
+                    {
+                      "expression": "SUM(`pm25`)",
+                      "name": "sum(pm25)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "color": {
+                  "fieldName": "series",
+                  "scale": {
+                    "mappings": [
+                      {
+                        "color": {
+                          "position": 4,
+                          "themeColorType": "visualizationColors"
+                        },
+                        "value": "Likely range, high"
+                      },
+                      {
+                        "color": {
+                          "position": 3,
+                          "themeColorType": "visualizationColors"
+                        },
+                        "value": "Likely range, low"
+                      }
+                    ],
+                    "type": "categorical"
+                  }
+                },
+                "x": {
+                  "displayName": "Time (SGT)",
+                  "fieldName": "hourly(time_sgt)",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "displayName": "PM2.5 (µg/m³)",
+                  "fieldName": "sum(pm25)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "PM2.5 forecast, next 24 hours (µg/m³, island average)"
+                }
+              },
+              "version": 3,
+              "widgetType": "line"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 4,
+            "width": 6,
+            "x": 6,
+            "y": 15
+          },
+          "widget": {
+            "name": "forecast-by-horizon",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "1074f68c",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`horizon`",
+                      "name": "horizon"
+                    },
+                    {
+                      "expression": "`for_time_sgt`",
+                      "name": "for_time_sgt"
+                    },
+                    {
+                      "expression": "`forecast`",
+                      "name": "forecast"
+                    },
+                    {
+                      "expression": "`likely_range`",
+                      "name": "likely_range"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "displayName": "Ahead",
+                    "fieldName": "horizon"
+                  },
+                  {
+                    "displayName": "For",
+                    "fieldName": "for_time_sgt"
+                  },
+                  {
+                    "displayName": "Forecast (µg/m³)",
+                    "fieldName": "forecast"
+                  },
+                  {
+                    "displayName": "Likely range",
+                    "fieldName": "likely_range"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Forecast by horizon"
+                }
+              },
+              "version": 2,
+              "widgetType": "table"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 2,
+            "width": 6,
+            "x": 6,
+            "y": 19
+          },
+          "widget": {
+            "multilineTextboxSpec": {
+              "lines": [
+                "Experimental forecast, not an official NEA forecast. Island-average PM2.5 from a simple model (ridge regression) trained on this project's own hourly history, refreshed every hour. In testing, it beat \"no change from now\" at every horizon overall, and the likely range contained the actual value about 70–92% of the time. "
+              ]
+            },
+            "name": "a8eb5be2"
           }
         }
       ],
