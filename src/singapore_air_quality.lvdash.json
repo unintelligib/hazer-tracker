@@ -160,6 +160,33 @@
         "   WHERE origin_ts = (SELECT max(origin_ts) FROM workspace.hazer.gold_forecast)\n",
         "   ORDER BY horizon_h;"
       ]
+    },
+    {
+      "displayName": "update_status",
+      "name": "38da1e43",
+      "queryLines": [
+        "WITH h AS (\n",
+        "  SELECT * FROM workspace.hazer.gold_hourly_island\n",
+        "  ORDER BY reading_ts DESC LIMIT 1\n",
+        "),\n",
+        "f AS (\n",
+        "  SELECT origin_ts, origin_date_sgt, origin_hour_sgt, max(written_at) AS written_at\n",
+        "  FROM workspace.hazer.gold_forecast\n",
+        "  WHERE origin_ts = (SELECT max(origin_ts) FROM workspace.hazer.gold_forecast)\n",
+        "  GROUP BY origin_ts, origin_date_sgt, origin_hour_sgt\n",
+        ")\n",
+        "SELECT\n",
+        "  concat(date_format(h.reading_date_sgt, 'd MMM'), ', ',\n",
+        "         lpad(h.reading_hour_sgt, 2, '0'), ':00 SGT')                 AS latest_reading_sgt,\n",
+        "  timestampdiff(MINUTE, h.reading_ts, current_timestamp())            AS minutes_since_reading,\n",
+        "  CASE WHEN timestampdiff(MINUTE, h.reading_ts, current_timestamp()) <= 120\n",
+        "       THEN 'Up to date' ELSE 'Delayed' END                           AS data_status,\n",
+        "  concat(date_format(f.origin_date_sgt, 'd MMM'), ', ',\n",
+        "         lpad(f.origin_hour_sgt, 2, '0'), ':00 SGT')                  AS latest_forecast_from_sgt,\n",
+        "  date_format(from_utc_timestamp(f.written_at, 'Asia/Singapore'),\n",
+        "              'd MMM, HH:mm')                                         AS forecast_written_sgt\n",
+        "FROM h CROSS JOIN f;\n"
+      ]
     }
   ],
   "pages": [
@@ -168,8 +195,8 @@
       "layout": [
         {
           "position": {
-            "height": 3,
-            "width": 4,
+            "height": 2,
+            "width": 3,
             "x": 0,
             "y": 0
           },
@@ -214,10 +241,10 @@
         },
         {
           "position": {
-            "height": 3,
-            "width": 4,
+            "height": 2,
+            "width": 3,
             "x": 0,
-            "y": 3
+            "y": 2
           },
           "widget": {
             "name": "health-band-nea",
@@ -259,10 +286,10 @@
         },
         {
           "position": {
-            "height": 3,
-            "width": 4,
-            "x": 4,
-            "y": 6
+            "height": 2,
+            "width": 3,
+            "x": 0,
+            "y": 4
           },
           "widget": {
             "name": "latest-reading",
@@ -304,8 +331,8 @@
         },
         {
           "position": {
-            "height": 3,
-            "width": 4,
+            "height": 2,
+            "width": 3,
             "x": 0,
             "y": 6
           },
@@ -354,10 +381,10 @@
         },
         {
           "position": {
-            "height": 3,
-            "width": 4,
-            "x": 8,
-            "y": 6
+            "height": 2,
+            "width": 3,
+            "x": 0,
+            "y": 8
           },
           "widget": {
             "name": "high-haze-alert-psi-201",
@@ -399,9 +426,9 @@
         },
         {
           "position": {
-            "height": 6,
-            "width": 8,
-            "x": 4,
+            "height": 10,
+            "width": 9,
+            "x": 3,
             "y": 0
           },
           "widget": {
@@ -507,10 +534,10 @@
         },
         {
           "position": {
-            "height": 6,
+            "height": 7,
             "width": 6,
             "x": 6,
-            "y": 9
+            "y": 10
           },
           "widget": {
             "name": "pm25-1hr-last-48-hours",
@@ -589,10 +616,10 @@
         },
         {
           "position": {
-            "height": 6,
+            "height": 7,
             "width": 6,
             "x": 0,
-            "y": 9
+            "y": 10
           },
           "widget": {
             "name": "daily-peak-psi",
@@ -649,10 +676,10 @@
         },
         {
           "position": {
-            "height": 6,
-            "width": 6,
+            "height": 7,
+            "width": 7,
             "x": 0,
-            "y": 15
+            "y": 17
           },
           "widget": {
             "name": "pm25-forecast-next-24-hours-ugm3-island-average",
@@ -736,9 +763,9 @@
         {
           "position": {
             "height": 4,
-            "width": 6,
-            "x": 6,
-            "y": 15
+            "width": 5,
+            "x": 7,
+            "y": 17
           },
           "widget": {
             "name": "forecast-by-horizon",
@@ -807,18 +834,169 @@
         },
         {
           "position": {
-            "height": 2,
-            "width": 6,
-            "x": 6,
-            "y": 19
+            "height": 3,
+            "width": 5,
+            "x": 7,
+            "y": 21
           },
           "widget": {
             "multilineTextboxSpec": {
               "lines": [
-                "Experimental forecast, not an official NEA forecast. Island-average PM2.5 from a simple model (ridge regression) trained on this project's own hourly history, refreshed every hour. In testing, it beat \"no change from now\" at every horizon overall, and the likely range contained the actual value about 70–92% of the time. "
+                "<span style=\"font-size: 16px;\">Experimental forecast, not an official NEA forecast. Island-average PM2.5 from a simple model (ridge regression) trained on this project's own hourly history, refreshed every hour. In testing, it beat \"no change from now\" at every horizon overall, and the likely range contained the actual value about 70–92% of the time.</span>"
               ]
             },
             "name": "a8eb5be2"
+          }
+        },
+        {
+          "position": {
+            "height": 2,
+            "width": 2,
+            "x": 0,
+            "y": 24
+          },
+          "widget": {
+            "name": "status",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "38da1e43",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`data_status`",
+                      "name": "data_status"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "data_status"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Data status"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 2,
+            "width": 3,
+            "x": 2,
+            "y": 24
+          },
+          "widget": {
+            "name": "latest-forecast",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "38da1e43",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`latest_forecast_from_sgt`",
+                      "name": "latest_forecast_from_sgt"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "latest_forecast_from_sgt"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Latest forecast from"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 2,
+            "width": 3,
+            "x": 5,
+            "y": 24
+          },
+          "widget": {
+            "name": "forecast-written-sgt",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "38da1e43",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`forecast_written_sgt`",
+                      "name": "forecast_written_sgt"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "data": {
+                "queryName": "main_query"
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "forecast_written_sgt"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "fields": [],
+                  "value": "Forecast written (SGT)"
+                }
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 2,
+            "width": 4,
+            "x": 8,
+            "y": 24
+          },
+          "widget": {
+            "multilineTextboxSpec": {
+              "lines": [
+                "<span style=\"font-size: 16px;\">**Source:**</span><span style=\"font-size: 16px;\"> NEA via data.gov.sg (PSI and PM2.5), updated hourly. Forecast: this project’s own model, refreshed every hour.</span>"
+              ]
+            },
+            "name": "d4442c45"
           }
         }
       ],
