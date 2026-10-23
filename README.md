@@ -2,7 +2,7 @@
 
 Near-real-time Singapore haze dashboard on Databricks: PSI and PM2.5 by region from NEA (via data.gov.sg), modelled with a bronze / silver / gold Delta pipeline and shown in an AI/BI dashboard. Built as a Databricks Asset Bundle on Free Edition (serverless only).
 
-> Status: ingest, silver, gold and the dashboard are built and running hourly. Screenshots, a demo and a design-choices write-up are still to come.
+> Status: ingest, silver, gold, an hourly PM2.5 forecast and the dashboard are built and running hourly. Screenshots, a demo and a design-choices write-up are still to come.
 
 ## Architecture
 
@@ -21,7 +21,7 @@ gold_*, ref_*             dashboard-ready tables
 AI/BI dashboard           "Singapore Air Quality"
 ```
 
-The hourly job runs three notebook tasks in order: `ingest` -> `silver` -> `gold`. Silver runs even if ingest fails (so a failed fetch does not block data already in bronze); gold runs only if silver succeeds. Gold tables are rebuilt on every run, so a backfilled gap heals automatically.
+The hourly job runs four notebook tasks in order: `ingest` -> `silver` -> `gold` -> `forecast`. Silver runs even if ingest fails (so a failed fetch does not block data already in bronze); gold runs only if silver succeeds, and forecast only if gold succeeds. Gold tables are rebuilt on every run, so a backfilled gap heals automatically.
 
 ## Data source
 
@@ -50,6 +50,7 @@ All tables live in `workspace.hazer`.
 | `gold_hourly_island` | One row per hour: max and average PSI, worst region, PM2.5 stats, band, `is_high_haze` |
 | `gold_daily_region` | One row per (SGT date, region) |
 | `gold_daily_island` | One row per SGT date, with `is_complete_day`, peak PSI, `hours_unhealthy_or_worse` and `hours_very_unhealthy` |
+| `gold_forecast` | One row per (forecast origin hour, horizon, model version): PM2.5 forecast and likely range. Kept from every run, so forecasts can be checked against what happened |
 
 **High-haze flag.** `is_high_haze` is true when the island PSI is in the "Very unhealthy" band or worse. The band is looked up from `ref_health_bands` rather than hardcoded. It is based on PSI because NEA health advisories apply to the 24-hour PSI, not to PM2.5 1-hour readings.
 
@@ -70,16 +71,16 @@ Design decisions and known limitations are in [docs/design-choices.md](docs/desi
 
 ![Singapore Air Quality dashboard, published view](docs/dashboard-overview.png)
 
-"Singapore Air Quality" is an AI/BI dashboard with one page, "Overview": counters (PSI, health band, latest reading, change versus the same hour yesterday, very unhealthy alert), a map of the five regions coloured by PSI band, a PM2.5 trend for the last 48 hours, and a daily peak PSI chart for the last 7 complete days. Its datasets use SGT date and hour columns, so the charts do not drift with time zones.
+"Singapore Air Quality" is an AI/BI dashboard with one page, "Overview": counters (PSI, health band, latest reading, change versus the same hour yesterday, very unhealthy alert), a map of the five regions coloured by PSI band, a PM2.5 trend for the last 48 hours, a daily peak PSI chart for the last 7 complete days, and a PM2.5 forecast section (chart, table by horizon and a note on its limits). Its datasets use SGT date and hour columns, so the charts do not drift with time zones.
 
 The dashboard is exported into the bundle (`src/singapore_air_quality.lvdash.json` and `resources/singapore_air_quality.dashboard.yml`), so `bundle deploy` creates a copy named `[dev] Singapore Air Quality`. Two things to know:
 
 * The SQL warehouse is looked up by name ("Serverless Starter Warehouse") through the `warehouse_id` variable in `databricks.yml`. If yours has a different name, change it there.
 * The hourly refresh schedule was set by hand on the published original, not in the bundle. The deployed copy has no refresh schedule of its own.
 
-## Forecast (in progress)
+## Forecast
 
-The plan is to show a short-range forecast of island-average PM2.5 (+1, +3, +6 and +24 hours) on the dashboard. It is evaluated in `notebooks/04_forecast_baseline.py`, which only reads data. This is not an official forecast.
+The dashboard shows a short-range forecast of island-average PM2.5 (+1, +3, +6 and +24 hours) with a likely range. The `forecast` task (`notebooks/06_forecast.py`, logic in `src/hazer/forecast.py`) refits the model on all history every hour and writes to `gold_forecast`. The method is evaluated in `notebooks/04_forecast_baseline.py`, which only reads data. This is not an official forecast.
 
 * **Model.** Ridge regression on the latest reading, recent lags (1, 2, 3, 6 and 24 hours) and hour of day, one model per horizon. It is compared with persistence ("the next hours look like now") on held-out recent data, at three split sizes.
 * **Overall.** Ridge has a lower average error than persistence at every horizon on every split: about 4% better at +1h and +3h, 6% at +6h and 10% at +24h.
@@ -93,7 +94,7 @@ The plan is to show a short-range forecast of island-average PM2.5 (+1, +3, +6 a
 1. Install the [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/install) and run `databricks auth login --host <workspace-url>`.
 2. Set the alert address for failure emails in your shell: the bundle variable is `alert_email`, supplied through the `BUNDLE_VAR_alert_email` environment variable. Deploying without it fails with a "no value" error.
 3. If your SQL warehouse is not named "Serverless Starter Warehouse", change the `warehouse_id` lookup in `databricks.yml`.
-4. `databricks bundle validate -t dev`, then `databricks bundle deploy -t dev`. This deploys the three notebooks, the hourly job and the dashboard.
+4. `databricks bundle validate -t dev`, then `databricks bundle deploy -t dev`. This deploys the notebooks, the hourly job and the dashboard.
 5. Run the job once (`databricks bundle run bronze_ingest_hourly -t dev`, or from the Jobs UI) and check `SELECT * FROM workspace.hazer.bronze_nea_air_quality`.
 6. Optional backfill for a past date: `databricks bundle run bronze_ingest_hourly -t dev --notebook-params backfill_date=YYYY-MM-DD`.
 
